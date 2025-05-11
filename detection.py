@@ -1,8 +1,8 @@
 import streamlit as st
 from streamlit_option_menu import option_menu
-from PIL import Image
 import cv2
 import numpy as np
+from PIL import Image, ExifTags
 from tensorflow.keras.models import load_model
 
 #Stresmlit Part
@@ -50,32 +50,55 @@ selected = option_menu(
 if selected =='Image':
     
     # Upload the image
-    img = st.file_uploader('Upload the Image', type=['png', 'jpg', 'jpeg'])
 
-    if img is not None:
-        # Display the uploaded image
+    img_file = st.file_uploader('Upload the Image', type=['png', 'jpg', 'jpeg'])
+
+    if img_file is not None:
+        # Open image using PIL
+        img = Image.open(img_file)
+
+        # Fix image orientation using EXIF
+        try:
+            for orientation in ExifTags.TAGS.keys():
+                if ExifTags.TAGS[orientation] == 'Orientation':
+                    break
+            exif = dict(img._getexif().items())
+
+            if exif[orientation] == 3:
+                img = img.rotate(180, expand=True)
+            elif exif[orientation] == 6:
+                img = img.rotate(270, expand=True)
+            elif exif[orientation] == 8:
+                img = img.rotate(90, expand=True)
+        except (AttributeError, KeyError, IndexError, TypeError):
+            pass
+
+        # Show the correctly oriented image
         st.image(img, width=300)
 
-        # Convert the uploaded image (BytesIO) to NumPy array for OpenCV
-        file_bytes = np.asarray(bytearray(img.read()), dtype=np.uint8)
-        opencv_image = cv2.imdecode(file_bytes, 1)  # Decode image as BGR
+        # Reset file pointer to beginning for OpenCV reading
+        img_file.seek(0)
 
-        # Resize, normalize, and expand dimensions
+        # Convert image for OpenCV
+        file_bytes = np.asarray(bytearray(img_file.read()), dtype=np.uint8)
+        opencv_image = cv2.imdecode(file_bytes, 1)  # Decode as BGR
+
+        # Resize and normalize image for model input
         resized_img = cv2.resize(opencv_image, (128, 128)).astype('float32') / 255.0
         input_data = np.expand_dims(resized_img, axis=0)
 
-        # Load the trained model
+        # Load your trained Keras model
         model_1 = load_model(r'D:\Projects\AI - Facemask Detection\model.h5')
 
-        # Predict
+        # Perform prediction
         prediction = model_1.predict(input_data)
 
-        # Show prediction
+        # Display the result
         if prediction[0][0] > 0.8:
             st.markdown(
                 """
                 <h2 style="
-                    color: green;
+                    color:#8bb933;
                     text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
                     font-family: Arial, sans-serif;
                 ">
@@ -88,7 +111,7 @@ if selected =='Image':
             st.markdown(
                 """
                 <h2 style="
-                    color: red;
+                    color:#f95835;
                     text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
                     font-family: Arial, sans-serif;
                 ">
@@ -97,7 +120,7 @@ if selected =='Image':
                 """, 
                 unsafe_allow_html=True
             )
-                    
+                        
 
     
 
